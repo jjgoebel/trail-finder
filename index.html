@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chicagoland First Rides</title>
+<meta name="description" content="Beginner-friendly mountain bike trails around Chicago, with live weather-based rideability, maps and directions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: sticky filter bar over a map/list split; the list stacks under the map on phones. */
+:root {
+  --bg: #f3f5f1;
+  --surface: #ffffff;
+  --fg: #1c241e;
+  --muted: #5b675e;
+  --line: #d9dfd6;
+  --accent: #2f5d3a;       /* pine */
+  --accent-fg: #ffffff;
+  --mud: #8a5a2b;
+  --ok: #2e7d32;  --ok-bg: #e3f1e4;
+  --warn: #9a6700; --warn-bg: #fbf0d6;
+  --bad: #b3261e;  --bad-bg: #f9e1df;
+  --green: #2e8b3d; --blue: #1f5fbf; --black: #1c1c1c; --skills: #8a5a2b;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121713; --surface: #1b221c; --fg: #e6ece6; --muted: #9aa79d; --line: #2c362e;
+  --accent: #7fc28e; --accent-fg: #0f1a12; --mud: #d29a62;
+  --ok: #7fd18a; --ok-bg: #1d3321; --warn: #e5b94a; --warn-bg: #352a10; --bad: #f08a80; --bad-bg: #3a1c1a;
+  --green: #5cc26c; --blue: #6fa3ff; --black: #e6ece6; --skills: #d29a62;
+  color-scheme: dark;
+}}
+:root[data-theme="dark"] {
+  --bg: #121713; --surface: #1b221c; --fg: #e6ece6; --muted: #9aa79d; --line: #2c362e;
+  --accent: #7fc28e; --accent-fg: #0f1a12; --mud: #d29a62;
+  --ok: #7fd18a; --ok-bg: #1d3321; --warn: #e5b94a; --warn-bg: #352a10; --bad: #f08a80; --bad-bg: #3a1c1a;
+  --green: #5cc26c; --blue: #6fa3ff; --black: #e6ece6; --skills: #d29a62;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.5 var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1280px; margin: 0 auto; }
+
+header { padding-block: 20px 8px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.2rem; line-height: 1; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 65ch; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1000; background: var(--bg); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-block: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 5px 12px; font: 500 13px var(--font-body); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 7px 12px; font: 600 13px var(--font-body); cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.ctl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+select { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.loc { font-size: 12px; color: var(--muted); }
+
+/* IMBA-style trail signs */
+.sign { display: inline-block; width: 12px; height: 12px; flex: none; }
+.sign.green { background: var(--green); border-radius: 50%; }
+.sign.blue { background: var(--blue); }
+.sign.black { background: var(--black); transform: rotate(45deg) scale(.85); }
+.sign.skills { background: var(--skills); border-radius: 3px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+
+main.wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; padding-block: 16px 40px; align-items: start; }
+#mapcol { position: sticky; top: 70px; display: flex; flex-direction: column; gap: 12px; }
+#map { height: calc(100vh - 200px); min-height: 360px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.line-sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+
+#list { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.count { font-size: 13px; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.c-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.c-title { min-width: 0; }
+.c-title h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; line-height: 1.1; margin: 0; cursor: pointer; }
+.c-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); margin-top: 2px; align-items: center; }
+.c-meta .levels { display: inline-flex; gap: 4px; align-items: center; }
+.badge { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+.badge.first { background: var(--ok-bg); color: var(--ok); }
+.ride { display: flex; flex-direction: column; gap: 4px; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.ride.ok { background: var(--ok-bg); } .ride.ok strong { color: var(--ok); }
+.ride.warn { background: var(--warn-bg); } .ride.warn strong { color: var(--warn); }
+.ride.bad { background: var(--bad-bg); } .ride.bad strong { color: var(--bad); }
+.ride.wait { background: var(--bg); color: var(--muted); }
+.ride .row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.ride strong { font-size: 14px; }
+.fc { display: flex; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.status-link { font-weight: 600; }
+.c-body p { margin: 0 0 6px; max-width: 65ch; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+dt { color: var(--muted); font-weight: 500; }
+dd { margin: 0; min-width: 0; }
+.caution { font-size: 13px; color: var(--warn); }
+.c-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.c-actions a, .c-actions button { font-size: 13px; }
+.c-actions a.btn { text-decoration: none; }
+.foot { font-size: 12px; color: var(--muted); }
+details.tips { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+details.tips summary { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; cursor: pointer; }
+details.tips ul { margin: 8px 0 0; padding-left: 18px; }
+details.tips li { margin-bottom: 4px; max-width: 65ch; }
+.note { font-size: 12px; color: var(--muted); }
+
+.leaflet-popup-content { font: 13px/1.4 var(--font-body); }
+.leaflet-container { font-family: var(--font-body); }
+
+@media (max-width: 820px) {
+  main.wrap { grid-template-columns: minmax(0, 1fr); }
+  #mapcol { position: static; }
+  .bar { position: static; }
+  #map { height: 52vh; min-height: 300px; }
+  h1 { font-size: 1.9rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <h1>Chicagoland First Rides</h1>
+  <p class="sub">Beginner-friendly mountain bike trails near Chicago. Each one shows how to get there, what to expect, and a live guess at whether it's dry enough to ride. Always check the official status link before you drive. Dirt trails here close after rain.</p>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="chips" role="group" aria-label="Difficulty">
+      <button class="chip" id="f-first" aria-pressed="true">Good first rides</button>
+      <button class="chip" id="f-green" aria-pressed="false"><i class="sign green"></i>Green</button>
+      <button class="chip" id="f-blue" aria-pressed="false"><i class="sign blue"></i>Blue</button>
+      <button class="chip" id="f-skills" aria-pressed="false"><i class="sign skills"></i>Skills park</button>
+      <button class="chip" id="f-all" aria-pressed="false">Show all</button>
+    </div>
+    <label class="ctl" for="f-dist">Within
+      <select id="f-dist">
+        <option value="25">25 mi</option>
+        <option value="40">40 mi</option>
+        <option value="60" selected>60 mi</option>
+        <option value="999">Any</option>
+      </select>
+    </label>
+    <label class="ctl" for="f-sort">Sort
+      <select id="f-sort">
+        <option value="dist">Distance</option>
+        <option value="ride">Most rideable</option>
+      </select>
+    </label>
+    <button class="btn" id="locate">Use my location</button>
+    <span class="loc" id="locmsg">Distances from downtown Chicago</span>
+  </div>
+</div>
+
+<main class="wrap">
+  <section id="mapcol" aria-label="Map">
+    <div id="map" role="region" aria-label="Trail map"></div>
+    <div class="legend">
+      <span><i class="sign green"></i>Green</span>
+      <span><i class="sign blue"></i>Blue</span>
+      <span><i class="sign black"></i>Black</span>
+      <span><i class="sign skills"></i>Skills</span>
+      <span><i class="line-sw" style="background:var(--mud)"></i>Dirt trail</span>
+      <span><i class="line-sw" style="background:var(--muted)"></i>Gravel/paved</span>
+    </div>
+    <p class="note" id="maptip">Tap <b>Show trail lines</b> on a card to load the actual trails from OpenStreetMap.</p>
+  </section>
+
+  <section aria-label="Trails" style="min-width:0;display:flex;flex-direction:column;gap:12px">
+    <div class="count" id="count"></div>
+    <div id="list"></div>
+
+    <details class="tips">
+      <summary>New rider tips</summary>
+      <ul>
+        <li><b>Mud = stay home.</b> If your tires leave ruts, turn around. Riding wet trails damages them and gets them closed longer. Check CAMBr Trailbot: green means go, red means closed.</li>
+        <li><b>Freeze-thaw is sneaky.</b> In late fall and spring, frozen ground is fine early in the morning, but it turns to mud by afternoon.</li>
+        <li><b>Yield:</b> bikes yield to hikers and horses. On two-way trails, the rider going downhill yields to the one climbing.</li>
+        <li><b>Bring:</b> helmet, water, a snack, a spare tube or plug kit, a mini pump, and a charged phone.</li>
+        <li><b>Tire pressure:</b> lower than you'd use on the road (often 20–28 psi). It grips better on roots and gravel.</li>
+        <li><b>Walk it.</b> Walking a section you're unsure about is normal and smart.</li>
+      </ul>
+    </details>
+
+    <p class="foot">Trail info was hand-checked against CAMBr, the forest preserve districts and community sites. Each card shows the date it was verified. Weather comes from Open-Meteo, and trail lines from OpenStreetMap contributors. The rideability badge is a weather-based guess, not official status.</p>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="trails.js"></script>
+<script>
+(() => {
+  const DOWNTOWN = { lat: 41.8781, lng: -87.6298 };
+  const LEVEL_NAME = { green: "Green", blue: "Blue", black: "Black", skills: "Skills park" };
+  const trails = window.TRAILS || [];
+  const state = { origin: DOWNTOWN, filter: "first", maxDist: 60, sort: "dist", weather: {}, selected: null };
+
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+  const saved = store.get("tf-prefs");
+  if (saved) Object.assign(state, { filter: saved.filter || state.filter, maxDist: saved.maxDist || state.maxDist, sort: saved.sort || state.sort });
+
+  const $ = (s) => document.querySelector(s);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // ---------- distance ----------
+  function miles(a, b) {
+    const R = 3958.8, toR = (d) => d * Math.PI / 180;
+    const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  // ---------- map ----------
+  let map = null, markers = {}, lineLayers = {};
+  if (window.L) {
+    map = L.map("map", { scrollWheelZoom: false }).setView([41.85, -87.95], 9);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+  } else {
+    $("#map").innerHTML = '<p style="padding:16px">The map couldn\'t load. Check your connection and reload. The trail list below still works.</p>';
+  }
+
+  function pinIcon(t) {
+    const lvl = t.levels.includes("green") ? "green" : t.levels[0];
+    return L.divIcon({
+      className: "",
+      html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.3)"><i class="sign ${lvl}"></i></div>`,
+      iconSize: [26, 26], iconAnchor: [13, 13]
+    });
+  }
+
+  // ---------- weather / rideability ----------
+  function rideability(t) {
+    const w = state.weather[t.id];
+    if (!w) return null;
+    const gravel = t.surface === "gravel";
+    const k = gravel ? 2 : 1;
+    let level, label, why;
+    if (w.rain48 >= 0.5 * k || (w.rain12 >= 0.2 * k)) { level = "bad"; label = gravel ? "Wet, expect puddles" : "Probably closed"; }
+    else if (w.rain48 >= 0.15 * k || w.rain12 >= 0.05 * k || (w.freezeThaw && !gravel)) { level = "warn"; label = "Maybe muddy"; }
+    else { level = "ok"; label = "Likely rideable"; }
+    why = `${w.rain48.toFixed(2)}" rain in last 48 h`;
+    if (w.freezeThaw && !gravel) why += " · freeze-thaw: soft by afternoon";
+    return { level, label, why, score: level === "ok" ? 0 : level === "warn" ? 1 : 2 };
+  }
+
+  async function loadWeather() {
+    const lats = trails.map(t => t.lat).join(","), lngs = trails.map(t => t.lng).join(",");
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}` +
+      `&hourly=precipitation,temperature_2m&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min` +
+      `&past_days=2&forecast_days=3&timezone=America%2FChicago&temperature_unit=fahrenheit&precipitation_unit=inch`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.status);
+      let data = await res.json();
+      if (!Array.isArray(data)) data = [data];
+      const now = Date.now();
+      data.forEach((d, i) => {
+        const t = trails[i]; if (!t) return;
+        let rain48 = 0, rain12 = 0, minRecent = 99, nowTemp = null;
+        d.hourly.time.forEach((ts, j) => {
+          const ms = new Date(ts + ":00").getTime();
+          const age = (now - ms) / 3600000;
+          if (age >= 0 && age <= 48) {
+            const p = d.hourly.precipitation[j] || 0;
+            rain48 += p; if (age <= 12) rain12 += p;
+            if (age <= 24) minRecent = Math.min(minRecent, d.hourly.temperature_2m[j]);
+          }
+          if (age >= 0 && age < 1) nowTemp = d.hourly.temperature_2m[j];
+        });
+        const todayIdx = d.daily.time.findIndex(x => x === new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" }));
+        const fc = [];
+        for (let j = Math.max(0, todayIdx); j < d.daily.time.length && fc.length < 3; j++) {
+          fc.push({ day: d.daily.time[j], hi: d.daily.temperature_2m_max[j], lo: d.daily.temperature_2m_min[j], rain: d.daily.precipitation_sum[j], pop: d.daily.precipitation_probability_max[j] });
+        }
+        const freezeThaw = minRecent <= 30 && (nowTemp ?? 0) >= 34;
+        state.weather[t.id] = { rain48, rain12, nowTemp, freezeThaw, fc };
+      });
+      state.weatherAt = new Date();
+    } catch (e) {
+      state.weatherError = true;
+    }
+    render();
+  }
+
+  // ---------- OpenStreetMap trail lines ----------
+  const OVERPASS = ["https://overpass.kumi.systems/api/interpreter", "https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+  async function overpass(q) {
+    let last;
+    for (const ep of OVERPASS) {
+      try {
+        const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 25000);
+        const r = await fetch(ep, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+        clearTimeout(to);
+        if (r.ok) return await r.json();
+        last = new Error("HTTP " + r.status);
+      } catch (e) { last = e; }
+    }
+    throw last;
+  }
+  async function showLines(t, btn) {
+    if (!map) return;
+    if (lineLayers[t.id]) { map.fitBounds(lineLayers[t.id].getBounds(), { maxZoom: 15 }); return; }
+    btn.disabled = true; btn.textContent = "Loading trail lines…";
+    try {
+      // 1) Saved snapshot (trail-lines.json, refreshed by scripts/refresh_trail_lines.py). 2) Live OpenStreetMap as fallback.
+      let ways = null, updated = null;
+      try {
+        state.snapshot ??= await fetch("trail-lines.json").then(r => r.ok ? r.json() : null).catch(() => null);
+        const s = state.snapshot?.trails?.[t.id];
+        if (s && s.ways.length) { ways = s.ways; updated = s.updated; }
+      } catch {}
+      if (!ways) {
+        const q = `[out:json][timeout:25];way["highway"~"^(path|track|bridleway|cycleway)$"]["bicycle"!="no"]["access"!~"^(private|no)$"](around:2500,${t.lat},${t.lng});out tags geom;`;
+        const data = await overpass(q);
+        ways = data.elements.filter(w => w.geometry).map(w => {
+          const s = (w.tags.surface || "").toLowerCase();
+          return { n: w.tags.name || "", s, m: w.tags["mtb:scale"] || "", d: /ground|dirt|earth|grass|mud|wood/.test(s) || (!s && w.tags.highway === "path") ? 1 : 0, c: w.geometry.map(p => [p.lat, p.lon]) };
+        });
+        updated = "live";
+      }
+      const group = L.featureGroup();
+      const mud = css("--mud"), grav = css("--muted");
+      for (const w of ways) {
+        const line = L.polyline(w.c, { color: w.d ? mud : grav, weight: w.d ? 3 : 2.5, opacity: .9, dashArray: w.d ? null : "4 4" });
+        line.bindTooltip(`${esc(w.n || (w.d ? "Dirt trail" : "Gravel/paved path"))}${w.m ? " · mtb:scale " + esc(w.m) : ""}${w.s ? " · " + esc(w.s) : ""}`, { sticky: true });
+        group.addLayer(line);
+      }
+      if (!ways.length) throw new Error("none");
+      group.addTo(map); lineLayers[t.id] = group;
+      map.fitBounds(group.getBounds(), { maxZoom: 15 });
+      btn.textContent = "Trail lines shown";
+      $("#maptip").textContent = `Trail lines from OpenStreetMap${updated === "live" ? " (live)" : ", saved " + updated}. Hover or tap a line for its name and surface.`;
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = e && e.message === "none" ? "No mapped trails found" : "Map server busy. Tap to retry";
+    }
+  }
+
+  // ---------- filtering + render ----------
+  function visible() {
+    return trails.map(t => ({ t, d: miles(state.origin, t), r: rideability(t) }))
+      .filter(({ t, d }) => {
+        if (d > state.maxDist) return false;
+        switch (state.filter) {
+          case "first": return t.firstRide;
+          case "green": return t.levels.includes("green");
+          case "blue": return t.levels.includes("blue");
+          case "skills": return t.levels.includes("skills");
+          default: return true;
+        }
+      })
+      .sort((a, b) => state.sort === "ride" ? ((a.r?.score ?? 3) - (b.r?.score ?? 3) || a.d - b.d) : a.d - b.d);
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const dayName = (iso) => new Date(iso + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" });
+
+  function rideHTML(t) {
+    const r = rideability(t), w = state.weather[t.id];
+    const status = `<a class="status-link" href="${t.statusUrl}" target="_blank" rel="noopener">Check today's official status ↗</a>`;
+    if (!r) {
+      return `<div class="ride wait"><div class="row"><span>${state.weatherError ? "Weather unavailable right now." : "Checking recent rain…"}</span>${status}</div></div>`;
+    }
+    const fc = w.fc.map(f => `<span>${dayName(f.day)} ${Math.round(f.hi)}°/${Math.round(f.lo)}° · ${f.pop ?? 0}% rain</span>`).join("");
+    return `<div class="ride ${r.level}">
+      <div class="row"><strong>${r.label}</strong><span>${r.why}</span></div>
+      <div class="fc">${fc}</div>
+      <div>${status} <span class="note">· ${esc(t.statusLabel)}</span></div>
+    </div>`;
+  }
+
+  function cardHTML({ t, d }) {
+    const levels = t.levels.map(l => `<i class="sign ${l}" title="${LEVEL_NAME[l]}"></i>`).join("");
+    const dest = `${t.lat},${t.lng}`;
+    return `<article class="card${state.selected === t.id ? " sel" : ""}" id="card-${t.id}">
+      <div class="c-head">
+        <div class="c-title">
+          <h2 data-focus="${t.id}">${esc(t.name)}</h2>
+          <div class="c-meta">
+            <span class="levels">${levels} ${t.levels.map(l => LEVEL_NAME[l]).join(" / ")}</span>
+            <span>${esc(t.town)}</span>
+            <span>${d.toFixed(0)} mi away</span>
+            <span>${esc(t.miles)}</span>
+            <span>${t.surface === "gravel" ? "Gravel" : "Dirt"}</span>
+          </div>
+        </div>
+        ${t.firstRide ? '<span class="badge first">Good first ride</span>' : ""}
+      </div>
+      ${rideHTML(t)}
+      <div class="c-body">
+        <p>${esc(t.expect)}</p>
+        <p><b>Start here:</b> ${esc(t.startHere)}</p>
+      </div>
+      <dl>
+        <dt>Parking</dt><dd>${esc(t.parking)}</dd>
+        <dt>Cost</dt><dd>${esc(t.fees)}</dd>
+        <dt>Facilities</dt><dd>${esc(t.facilities)}</dd>
+        <dt>Rules</dt><dd>${esc(t.rules)}</dd>
+        <dt>Managed by</dt><dd>${esc(t.manager)}</dd>
+      </dl>
+      ${t.caution ? `<div class="caution">⚠ ${esc(t.caution)}</div>` : ""}
+      <div class="c-actions">
+        <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${dest}" target="_blank" rel="noopener">Directions</a>
+        <a class="btn ghost" href="https://maps.apple.com/?daddr=${dest}" target="_blank" rel="noopener">Apple Maps</a>
+        <a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=transit" target="_blank" rel="noopener">Transit</a>
+        <button class="btn ghost" data-lines="${t.id}">Show trail lines</button>
+        <a class="btn ghost" href="${t.infoUrl}" target="_blank" rel="noopener">Trail info</a>
+      </div>
+      <div class="foot">Verified ${new Date(t.verified + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · Sources: ${t.sources.map(esc).join(", ")}</div>
+    </article>`;
+  }
+
+  function render() {
+    const rows = visible();
+    $("#list").innerHTML = rows.length ? rows.map(cardHTML).join("") :
+      `<div class="card"><p style="margin:0">No trails match. Try <b>Show all</b> or a bigger distance.</p></div>`;
+    $("#count").textContent = `${rows.length} trail${rows.length === 1 ? "" : "s"}` +
+      (state.weatherAt ? ` · weather updated ${state.weatherAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "");
+    ["first", "green", "blue", "skills", "all"].forEach(f => $("#f-" + f).setAttribute("aria-pressed", String(state.filter === f)));
+    $("#f-dist").value = String(state.maxDist); $("#f-sort").value = state.sort;
+
+    if (map) {
+      const ids = new Set(rows.map(r => r.t.id));
+      trails.forEach(t => {
+        if (!markers[t.id]) {
+          markers[t.id] = L.marker([t.lat, t.lng], { icon: pinIcon(t), title: t.name })
+            .bindPopup(`<b>${esc(t.name)}</b><br>${t.levels.map(l => LEVEL_NAME[l]).join(" / ")} · ${esc(t.miles)}<br><a href="#card-${t.id}">See details</a> · <a href="https://www.google.com/maps/dir/?api=1&destination=${t.lat},${t.lng}" target="_blank" rel="noopener">Directions</a>`)
+            .on("click", () => select(t.id, false));
+        }
+        if (ids.has(t.id)) markers[t.id].addTo(map); else markers[t.id].remove();
+      });
+    }
+    store.set("tf-prefs", { filter: state.filter, maxDist: state.maxDist, sort: state.sort });
+  }
+
+  function select(id, fly) {
+    state.selected = id;
+    document.querySelectorAll(".card.sel").forEach(c => c.classList.remove("sel"));
+    const card = document.getElementById("card-" + id);
+    if (card) { card.classList.add("sel"); if (!fly) card.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    const t = trails.find(x => x.id === id);
+    if (fly && map && t) { map.setView([t.lat, t.lng], 13); markers[id]?.openPopup(); if (window.innerWidth <= 820) $("#map").scrollIntoView({ behavior: "smooth" }); }
+  }
+
+  // ---------- events ----------
+  ["first", "green", "blue", "skills", "all"].forEach(f => $("#f-" + f).addEventListener("click", () => { state.filter = f; render(); }));
+  $("#f-dist").addEventListener("change", e => { state.maxDist = +e.target.value; render(); });
+  $("#f-sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+  $("#list").addEventListener("click", e => {
+    const lb = e.target.closest("[data-lines]");
+    if (lb) { const t = trails.find(x => x.id === lb.dataset.lines); select(t.id, true); showLines(t, lb); return; }
+    const h = e.target.closest("[data-focus]");
+    if (h) select(h.dataset.focus, true);
+  });
+  $("#locate").addEventListener("click", () => {
+    const msg = $("#locmsg");
+    if (!navigator.geolocation) { msg.textContent = "Location isn't available in this browser. Using downtown Chicago."; return; }
+    msg.textContent = "Finding you…";
+    navigator.geolocation.getCurrentPosition(p => {
+      state.origin = { lat: p.coords.latitude, lng: p.coords.longitude };
+      msg.textContent = "Distances from your location";
+      if (map) {
+        if (state.youMarker) state.youMarker.remove();
+        state.youMarker = L.circleMarker([state.origin.lat, state.origin.lng], { radius: 7, color: css("--accent"), fillOpacity: .8 }).addTo(map).bindTooltip("You");
+      }
+      render();
+    }, () => { msg.textContent = "Couldn't get your location. Using downtown Chicago."; }, { timeout: 10000, maximumAge: 600000 });
+  });
+
+  render();
+  loadWeather();
+})();
+</script>
+</body>
+</html>
