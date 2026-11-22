@@ -7,7 +7,7 @@ A one-page web app for finding beginner-friendly mountain bike trails around Chi
 - **Getting there**: parking, cost, facilities, plus Google/Apple/transit directions and distance from you.
 - **Beginner filter** on by default.
 
-## Run it
+## How to run it
 
 Open `index.html` in a browser, or serve the folder:
 
