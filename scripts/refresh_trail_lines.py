@@ -4,7 +4,7 @@
 Writes trail-lines.json (compact) next to index.html. Re-run any time to refresh:
     python3 scripts/refresh_trail_lines.py
 """
-import json, re, sys, time, urllib.parse, urllib.request, datetime, pathlib
+import json, re, sys, time, subprocess, urllib.parse, datetime, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENDPOINTS = [
@@ -31,9 +31,10 @@ def query(lat, lng):
     for attempt in range(3):
         for ep in ENDPOINTS:
             try:
-                req = urllib.request.Request(ep, data=body, headers={"User-Agent": "trail-finder/0.1"})
-                with urllib.request.urlopen(req, timeout=180) as r:
-                    return json.load(r)
+                # curl uses the system certificate store (python.org builds often lack one).
+                r = subprocess.run(["curl", "-sS", "--fail", "-m", "180", "-A", "trail-finder/0.1",
+                                    "--data-binary", "@-", ep], input=body, capture_output=True, check=True)
+                return json.loads(r.stdout)
             except Exception as e:
                 print(f"  {ep.split('/')[2]}: {e}", file=sys.stderr)
         time.sleep(10 * (attempt + 1))

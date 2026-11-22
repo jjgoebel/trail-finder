@@ -2,7 +2,7 @@
 
 A one-page web app for finding beginner-friendly mountain bike trails around Chicago.
 
-- **Map** of trailheads (Leaflet + OpenStreetMap). Tap **Show trail lines** to load the real trails live from OpenStreetMap.
+- **Map** of trailheads (Leaflet + OpenStreetMap). Tap **Show trail lines** to draw the real trails from OpenStreetMap (saved in `trail-lines.json`).
 - **Rideability guess** from live weather (Open-Meteo): rain over the last 48 h, freeze-thaw, and a 3-day forecast. It's a guess, so always tap the official status link (CAMBr Trailbot or the forest preserve).
 - **Getting there**: parking, cost, facilities, plus Google/Apple/transit directions and distance from you.
 - **Beginner filter** on by default.
@@ -19,7 +19,11 @@ Then visit http://localhost:8000. Location needs `localhost` or https, not a `fi
 
 ## Keeping it up to date
 
-Trail facts live in `trails.js`. Each entry has a `verified` date and `sources`. To refresh, re-check the source pages, edit the entry, and bump `verified`. Live data (weather, trail lines) needs no edits.
+Trail facts live in `trails.js`. Each entry has a `verified` date and `sources`. To refresh, re-check the source pages, edit the entry, and bump `verified`. Weather is live and needs no edits. To refresh the saved trail lines from OpenStreetMap (takes a few minutes), run:
+
+```bash
+python3 scripts/refresh_trail_lines.py
+```
 
 ## Data credits
 
